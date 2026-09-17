@@ -1,0 +1,7 @@
+{
+  "source_dir": "C:\\Users\\romain\\Desktop\\www\\html",
+  "backup_dir": "C:\\Users\\romain\\Desktop\\www\\backup",
+  "keys_dir": "C:\\Users\\romain\\Desktop\\www\\keys",
+  "compression": "gz",
+  "kdf_iterations": 390000
+}
