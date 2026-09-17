@@ -17,6 +17,7 @@ Sans --dest, la restauration se fait dans le dossier source d'origine
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import tarfile
 import tempfile
@@ -24,8 +25,9 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-DEFAULT_BACKUP_DIR = r"C:\Users\romain\Desktop\www\backup"
-DEFAULT_KEYS_DIR = r"C:\Users\romain\Desktop\www\keys"
+import config as cfg
+
+ARCHIVE_SUFFIX_RE = re.compile(r"\.tar\.(gz|bz2|xz)\.enc$")
 
 
 def sha256_of_bytes(data: bytes) -> str:
@@ -48,9 +50,7 @@ def find_manifest(keys_dir: Path, name):
         return manifests[-1]
 
     for m in manifests:
-        backup_stem = m["backup_file"]
-        if backup_stem.endswith(".tar.gz.enc"):
-            backup_stem = backup_stem[: -len(".tar.gz.enc")]
+        backup_stem = ARCHIVE_SUFFIX_RE.sub("", m["backup_file"])
         candidates = {m["backup_file"], m["timestamp"], backup_stem, Path(m["key_file"]).stem}
         if name in candidates:
             return m
@@ -93,12 +93,14 @@ def restore(manifest: dict, backup_dir: Path, keys_dir: Path, dest: Path, force:
         )
     print("Hash valide, l'archive est intacte.")
 
+    compression = manifest.get("compression", "gz")
+
     dest.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
-        tmp_tar = Path(tmp) / "restore.tar.gz"
+        tmp_tar = Path(tmp) / f"restore.tar.{compression}"
         tmp_tar.write_bytes(plaintext)
         extract_dir = Path(tmp) / "extracted"
-        with tarfile.open(tmp_tar, "r:gz") as tar:
+        with tarfile.open(tmp_tar, f"r:{compression}") as tar:
             tar.extractall(extract_dir)
 
         # L'archive contient un seul dossier racine (le dossier source tel
@@ -121,11 +123,13 @@ def restore(manifest: dict, backup_dir: Path, keys_dir: Path, dest: Path, force:
 
 
 def main() -> None:
+    config = cfg.load()
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--backup", help="Nom de fichier ou horodatage de la sauvegarde (defaut : la plus recente)")
     parser.add_argument("--dest", help="Dossier de destination (defaut : dossier source d'origine)")
-    parser.add_argument("--backup-dir", default=DEFAULT_BACKUP_DIR)
-    parser.add_argument("--keys-dir", default=DEFAULT_KEYS_DIR)
+    parser.add_argument("--backup-dir", default=config["backup_dir"])
+    parser.add_argument("--keys-dir", default=config["keys_dir"])
     parser.add_argument("--force", action="store_true", help="Ecraser le dossier de destination s'il n'est pas vide")
     parser.add_argument("--list", action="store_true", help="Lister les sauvegardes disponibles et quitter")
     args = parser.parse_args()

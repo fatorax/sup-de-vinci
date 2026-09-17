@@ -11,8 +11,11 @@ du dossier "backup") : quelqu'un qui vole uniquement la sauvegarde ne peut
 pas la dechiffrer, et restore.py refuse toute archive dont le hash ne
 correspond plus a celui du manifeste.
 
+Les dossiers et parametres par defaut viennent de config.json (voir config.py).
+
 Usage:
     python backup.py [--source DOSSIER] [--backup-dir DOSSIER] [--keys-dir DOSSIER]
+                      [--compression {gz,bz2,xz}]
 """
 import argparse
 import hashlib
@@ -24,9 +27,7 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
-DEFAULT_SOURCE = r"C:\Users\romain\Desktop\www\html"
-DEFAULT_BACKUP_DIR = r"C:\Users\romain\Desktop\www\backup"
-DEFAULT_KEYS_DIR = r"C:\Users\romain\Desktop\www\keys"
+import config as cfg
 
 CHUNK_SIZE = 1024 * 1024
 
@@ -39,12 +40,12 @@ def sha256_of_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def make_archive(source: Path, dest_tar: Path) -> None:
-    with tarfile.open(dest_tar, "w:gz") as tar:
+def make_archive(source: Path, dest_tar: Path, compression: str) -> None:
+    with tarfile.open(dest_tar, f"w:{compression}") as tar:
         tar.add(source, arcname=source.name)
 
 
-def backup(source: Path, backup_dir: Path, keys_dir: Path) -> None:
+def backup(source: Path, backup_dir: Path, keys_dir: Path, compression: str) -> None:
     if not source.is_dir():
         raise SystemExit(f"Erreur : dossier source introuvable : {source}")
 
@@ -53,11 +54,12 @@ def backup(source: Path, backup_dir: Path, keys_dir: Path) -> None:
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"{source.name}_{timestamp}"
+    archive_ext = f"tar.{compression}"
 
     with tempfile.TemporaryDirectory() as tmp:
-        plain_tar = Path(tmp) / f"{backup_name}.tar.gz"
+        plain_tar = Path(tmp) / f"{backup_name}.{archive_ext}"
         print(f"Archivage de {source} ...")
-        make_archive(source, plain_tar)
+        make_archive(source, plain_tar, compression)
 
         sha256_hash = sha256_of_file(plain_tar)
         size_bytes = plain_tar.stat().st_size
@@ -66,7 +68,7 @@ def backup(source: Path, backup_dir: Path, keys_dir: Path) -> None:
         key = Fernet.generate_key()
         token = Fernet(key).encrypt(plain_tar.read_bytes())
 
-    backup_file = backup_dir / f"{backup_name}.tar.gz.enc"
+    backup_file = backup_dir / f"{backup_name}.{archive_ext}.enc"
     key_file = keys_dir / f"{backup_name}.key"
     manifest_file = keys_dir / f"{backup_name}.json"
 
@@ -81,6 +83,7 @@ def backup(source: Path, backup_dir: Path, keys_dir: Path) -> None:
                 "key_file": key_file.name,
                 "sha256_plaintext": sha256_hash,
                 "size_bytes": size_bytes,
+                "compression": compression,
                 "algorithm": "Fernet (AES-128-CBC + HMAC-SHA256)",
             },
             indent=2,
@@ -96,13 +99,16 @@ def backup(source: Path, backup_dir: Path, keys_dir: Path) -> None:
 
 
 def main() -> None:
+    config = cfg.load()
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--source", default=DEFAULT_SOURCE)
-    parser.add_argument("--backup-dir", default=DEFAULT_BACKUP_DIR)
-    parser.add_argument("--keys-dir", default=DEFAULT_KEYS_DIR)
+    parser.add_argument("--source", default=config["source_dir"])
+    parser.add_argument("--backup-dir", default=config["backup_dir"])
+    parser.add_argument("--keys-dir", default=config["keys_dir"])
+    parser.add_argument("--compression", choices=sorted(cfg.VALID_COMPRESSIONS), default=config["compression"])
     args = parser.parse_args()
 
-    backup(Path(args.source), Path(args.backup_dir), Path(args.keys_dir))
+    backup(Path(args.source), Path(args.backup_dir), Path(args.keys_dir), args.compression)
 
 
 if __name__ == "__main__":
