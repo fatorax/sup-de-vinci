@@ -17,6 +17,7 @@ Sans --dest, la restauration se fait dans le dossier source d'origine
 import argparse
 import hashlib
 import json
+import shutil
 import tarfile
 import tempfile
 from pathlib import Path
@@ -96,9 +97,25 @@ def restore(manifest: dict, backup_dir: Path, keys_dir: Path, dest: Path, force:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_tar = Path(tmp) / "restore.tar.gz"
         tmp_tar.write_bytes(plaintext)
-        print(f"Extraction vers {dest} ...")
+        extract_dir = Path(tmp) / "extracted"
         with tarfile.open(tmp_tar, "r:gz") as tar:
-            tar.extractall(dest)
+            tar.extractall(extract_dir)
+
+        # L'archive contient un seul dossier racine (le dossier source tel
+        # qu'il etait au moment du backup) : on en deverse le contenu
+        # directement dans dest, sans le recreer comme sous-dossier.
+        entries = list(extract_dir.iterdir())
+        archived_root = entries[0] if len(entries) == 1 and entries[0].is_dir() else extract_dir
+
+        print(f"Extraction vers {dest} ...")
+        for item in archived_root.iterdir():
+            target_path = dest / item.name
+            if target_path.exists():
+                if target_path.is_dir():
+                    shutil.rmtree(target_path)
+                else:
+                    target_path.unlink()
+            shutil.move(str(item), str(target_path))
 
     print(f"Restauration terminee dans : {dest}")
 
