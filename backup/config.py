@@ -1,14 +1,19 @@
 """Configuration partagee par backup.py, restore.py et encrypt.py.
 
-Les valeurs sont lues depuis config.json (cree automatiquement avec des
-valeurs par defaut s'il n'existe pas encore). Modifier config.json suffit
+Les valeurs sont lues depuis config/config.json (cree automatiquement avec
+des valeurs par defaut s'il n'existe pas encore). Modifier ce fichier suffit
 a changer les dossiers utilises ou les parametres de cryptage, sans toucher
 aux scripts.
+
+Valeurs possibles pour "compression" (format des archives de backup.py) :
+    gz   - rapide, compression correcte (par defaut)
+    bz2  - plus lent, compresse mieux que gz
+    xz   - le plus lent, la meilleure compression
 """
 import json
 from pathlib import Path
 
-CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
+CONFIG_PATH = Path(__file__).resolve().parent / "config" / "config.json"
 
 DEFAULTS = {
     "source_dir": r"C:\Users\romain\Desktop\www\html",
@@ -24,6 +29,7 @@ VALID_COMPRESSIONS = {"gz", "bz2", "xz"}
 def load() -> dict:
     """Charge config.json (le cree avec les valeurs par defaut si absent)."""
     if not CONFIG_PATH.exists():
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_PATH.write_text(json.dumps(DEFAULTS, indent=2), encoding="utf-8")
         return dict(DEFAULTS)
 
